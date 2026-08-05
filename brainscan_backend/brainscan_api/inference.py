@@ -256,7 +256,8 @@ def predict_image(disease_label: str, uploaded_files):
             top_class = int(torch.argmax(mri_probabilities, dim=1).item())
             confidence = float(mri_probabilities[0, top_class].item())
 
-        grad_cam = build_gradcam(model, mri_tensor)
+        mri_grad_cam = build_gradcam(model, mri_tensor)
+        ct_grad_cam = build_gradcam(model, ct_tensor)
         labels = CLASS_LABELS.get(disease_label, [f'Class {idx}' for idx in range(mri_probabilities.shape[1])])
         predicted_label = labels[top_class] if top_class < len(labels) else f'Class {top_class}'
 
@@ -264,7 +265,9 @@ def predict_image(disease_label: str, uploaded_files):
         return {
             'prediction': predicted_label,
             'confidence_score': f'{confidence:.4f}',
-            'grad_cam': grad_cam,
+            'grad_cam_mri': mri_grad_cam,
+            'grad_cam_ct': ct_grad_cam,
+            'grad_cam': mri_grad_cam,
             'explanation': explanation,
         }
 

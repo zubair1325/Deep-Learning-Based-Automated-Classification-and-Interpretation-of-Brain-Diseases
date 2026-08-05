@@ -73,6 +73,14 @@ button:disabled {
   color: #fda4af;
 }
 
+.helper-text {
+  color: #cbd5e1;
+  font-size: 0.95rem;
+  margin-top: -6px;
+  margin-bottom: 10px;
+  line-height: 1.45;
+}
+
 .status-bar {
   display: flex;
   gap: 10px;
@@ -118,6 +126,22 @@ button:disabled {
 
 .confidence-score {
   color: #bfdbfe;
+}
+
+.dual-gradcam-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 16px;
+}
+
+.dual-gradcam-grid figure {
+  margin: 0;
+}
+
+.dual-gradcam-grid figcaption {
+  margin-bottom: 10px;
+  color: #bfdbfe;
+  font-size: 0.95rem;
 }
 
 .explanation-block {

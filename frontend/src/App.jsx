@@ -169,7 +169,30 @@ function App() {
 
             <article>
               <h2>Grad-CAM</h2>
-              {result.grad_cam ? (
+              {needsDualUpload ? (
+                <div className="dual-gradcam-grid">
+                  {result.grad_cam_mri ? (
+                    <figure>
+                      <figcaption>MRI Grad-CAM</figcaption>
+                      <img
+                        className="gradcam-image"
+                        src={`data:image/png;base64,${result.grad_cam_mri}`}
+                        alt="MRI Grad-CAM activation map"
+                      />
+                    </figure>
+                  ) : null}
+                  {result.grad_cam_ct ? (
+                    <figure>
+                      <figcaption>CT Grad-CAM</figcaption>
+                      <img
+                        className="gradcam-image"
+                        src={`data:image/png;base64,${result.grad_cam_ct}`}
+                        alt="CT Grad-CAM activation map"
+                      />
+                    </figure>
+                  ) : null}
+                </div>
+              ) : result.grad_cam ? (
                 <img
                   className="gradcam-image"
                   src={`data:image/png;base64,${result.grad_cam}`}
