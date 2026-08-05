@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { z } from "zod";
 import "./App.css";
 
 const diseaseOptions = [
@@ -23,6 +24,123 @@ function App() {
     [selectedDisease],
   );
   const needsDualUpload = selectedDisease === "Brain Tumor MRI and CT Scan";
+
+  const explanationSchema = z.object({
+    summary: z.string(),
+    detailed_visual_description: z.string(),
+    imaging_findings: z.string(),
+    measurements: z.string().optional(),
+    differential_diagnosis: z.string(),
+    interpretation: z.string(),
+    suggested_urgency: z.string().optional(),
+    recommended_next_steps: z.string().optional(),
+    treatment_options: z.string().optional(),
+    confidence: z.union([z.number(), z.string()]).optional(),
+    limitations: z.string().optional(),
+    image_references: z.record(z.any()).optional(),
+    references: z.string().optional(),
+    notes_for_provider: z.string().optional(),
+  });
+
+  const tryParseExplanation = (rawValue) => {
+    let value = rawValue;
+
+    if (typeof value === "string") {
+      const sanitized = (text) => {
+        const firstBrace = text.indexOf("{");
+        if (firstBrace === -1) {
+          return null;
+        }
+
+        let candidate = text.slice(firstBrace);
+        candidate = candidate.replace(/,\s*([\]}])/g, "$1");
+        candidate = candidate.replace(/\r?\n/g, " ");
+
+        const openBraces = candidate.split("{").length - 1;
+        const closeBraces = candidate.split("}").length - 1;
+        if (closeBraces < openBraces) {
+          candidate += "}".repeat(openBraces - closeBraces);
+        }
+
+        return candidate;
+      };
+
+      try {
+        return JSON.parse(value);
+      } catch {
+        const candidate = sanitized(value);
+        if (!candidate) {
+          return null;
+        }
+
+        try {
+          return JSON.parse(candidate);
+        } catch {
+          return null;
+        }
+      }
+    }
+
+    return typeof value === "object" && value !== null ? value : null;
+  };
+
+  const parsedExplanation = useMemo(() => {
+    const value = tryParseExplanation(result?.explanation);
+    if (!value || typeof value !== "object") {
+      return null;
+    }
+
+    const parsed = explanationSchema.safeParse(value);
+    return parsed.success ? parsed.data : value;
+  }, [result?.explanation]);
+
+  const toTitle = (key) =>
+    key.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
+
+  const renderExplanationValue = (value) => {
+    if (value == null || value === "") {
+      return null;
+    }
+
+    if (typeof value === "string") {
+      if (value.includes("\n")) {
+        return (
+          <ul className="detail-list">
+            {renderList(value).map((item, index) => (
+              <li key={index}>{item}</li>
+            ))}
+          </ul>
+        );
+      }
+      return <p>{value}</p>;
+    }
+
+    if (Array.isArray(value)) {
+      return (
+        <ul className="detail-list">
+          {value.map((item, index) => (
+            <li key={index}>{item}</li>
+          ))}
+        </ul>
+      );
+    }
+
+    if (typeof value === "object") {
+      return (
+        <pre className="explanation-json">{JSON.stringify(value, null, 2)}</pre>
+      );
+    }
+
+    return <p>{String(value)}</p>;
+  };
+
+  const renderList = (text) => {
+    if (!text) return [];
+    return text
+      .split(/\r?\n/)
+      .map((item) => item.trim())
+      .filter(Boolean);
+  };
 
   const handleSubmit = async (event) => {
     event.preventDefault();
@@ -161,9 +279,33 @@ function App() {
               <p className="confidence-score">
                 Confidence score: {result.confidence_score}
               </p>
+              {result.explanation_source ? (
+                <p className="explanation-source">
+                  Explanation source:{" "}
+                  {result.explanation_source === "AI"
+                    ? "AI-generated"
+                    : "Rule-based fallback"}
+                </p>
+              ) : null}
+              <div className="warning-block">
+                <strong>Note:</strong> These results are for informational
+                purposes only and may not always be correct. Please consult a
+                healthcare professional for final interpretation.
+              </div>
               <div className="explanation-block">
                 <h3>AI explanation</h3>
-                <p>{result.explanation}</p>
+                {parsedExplanation ? (
+                  <div className="explanation-grid">
+                    {Object.keys(parsedExplanation).map((key) => (
+                      <section className="explanation-section" key={key}>
+                        <h4>{toTitle(key)}</h4>
+                        {renderExplanationValue(parsedExplanation[key])}
+                      </section>
+                    ))}
+                  </div>
+                ) : (
+                  <p>{result.explanation}</p>
+                )}
               </div>
             </article>
 
