@@ -133,6 +133,39 @@ def _build_preprocessor():
     ])
 
 
+def _clean_scan_image(image: Image.Image) -> Image.Image:
+    np_image = np.array(image)
+    if np_image.ndim == 2:
+        np_image = cv2.cvtColor(np_image, cv2.COLOR_GRAY2BGR)
+    else:
+        np_image = cv2.cvtColor(np_image, cv2.COLOR_RGB2BGR)
+
+    gray = cv2.cvtColor(np_image, cv2.COLOR_BGR2GRAY)
+    _, mask = cv2.threshold(gray, 235, 255, cv2.THRESH_BINARY)
+
+    if mask.sum() == 0:
+        return image
+
+    num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(mask, connectivity=8)
+    artifact_mask = np.zeros_like(mask)
+    h, w = mask.shape
+
+    for i in range(1, num_labels):
+        x, y, ww, hh, area = stats[i]
+        if area < 3000 and (hh < 120 or ww < 300):
+            if 15 < x < w - 15 and 15 < y < h - 15:
+                artifact_mask[labels == i] = 255
+
+    if artifact_mask.sum() == 0:
+        return image
+
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5))
+    artifact_mask = cv2.dilate(artifact_mask, kernel, iterations=2)
+    cleaned = cv2.inpaint(np_image, artifact_mask, 3, cv2.INPAINT_TELEA)
+    cleaned = cv2.cvtColor(cleaned, cv2.COLOR_BGR2RGB)
+    return Image.fromarray(cleaned)
+
+
 def _pil_image_to_bytes(image: Image.Image, format: str = 'PNG') -> bytes:
     buffer = io.BytesIO()
     image.save(buffer, format=format)
@@ -228,7 +261,8 @@ def _load_pil_image(uploaded_file):
 
 def preprocess_image(uploaded_file):
     image = _load_pil_image(uploaded_file)
-    tensor = _build_preprocessor()(image)
+    cleaned = _clean_scan_image(image)
+    tensor = _build_preprocessor()(cleaned)
     return tensor.unsqueeze(0)
 
 

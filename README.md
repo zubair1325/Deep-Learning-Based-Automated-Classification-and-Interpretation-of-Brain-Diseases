@@ -38,6 +38,30 @@ This project is intended for educational, research, and demonstration purposes a
 
 ---
 
+## 1.1 Full request-to-response workflow
+
+The complete BrainScan workflow includes every step from user upload to final frontend rendering:
+
+1. The user chooses a disease category in the React UI.
+2. The user uploads one image for single-image categories or two files for the MRI + CT workflow.
+3. The frontend performs local validation and then sends a multipart HTTP POST request to `/api/predict/`.
+4. The Django backend receives the request in `brainscan_backend/brainscan_api/views.py`.
+5. The backend validates the selected disease label and the required uploaded files.
+6. Uploaded files are opened as PIL images and converted to RGB.
+7. The backend applies artifact removal to the raw scan image using OpenCV-based cleaning logic.
+8. The cleaned scan is resized to 224x224 pixels.
+9. The cleaned image is transformed to a PyTorch tensor and normalized with ImageNet statistics.
+10. The selected model is loaded from `Saved Model/` and matched to the disease label.
+11. The cleaned tensor is passed through the model to generate logits, probabilities, a predicted class, and a confidence score.
+12. Grad-CAM is computed from the model’s feature maps and fused with the cleaned input image.
+13. The backend generates a human-readable explanation, either from a rule-based fallback or via the Gemini API when configured.
+14. The backend returns a JSON response containing prediction, confidence, Grad-CAM image data, explanation content, and optional image references.
+15. The frontend receives the JSON response and renders the prediction card, the Grad-CAM overlay, and the explanation sections in the UI.
+
+This makes the workflow explicit for both single-image and dual-image inference modes.
+
+---
+
 ## 2. High-level architecture
 
 ### Frontend
@@ -330,13 +354,16 @@ The inference script resolves the correct architecture based on the selected dis
 
 ### Preprocessing used for inference
 
-Each uploaded image is:
+Each uploaded image follows a strict backend preprocessing pipeline:
 
-- opened as a PIL image
-- converted to RGB
-- resized to 224x224
-- converted to a tensor
-- normalized using ImageNet statistics
+- the backend receives the image file through Django’s request handler
+- the file is opened as a PIL image and converted to RGB
+- the raw scan image is cleaned to reduce visible artifacts and text overlays using OpenCV-based artifact detection and inpainting
+- the cleaned image is resized to 224x224 pixels
+- the cleaned image is converted to a PyTorch tensor
+- the tensor is normalized using ImageNet mean and standard deviation
+
+Note: This cleaning step is applied before model inference and before Grad-CAM generation, so the model and heatmap are produced from the cleaned scan rather than the raw upload.
 
 ### Grad-CAM generation
 

@@ -11,6 +11,42 @@ const diseaseOptions = [
   "Parkinsons MRI",
 ];
 
+const TEAM = {
+  leader: { name: "Md. Zubair Rahman", id: "0242220005101325" },
+  member: { name: "Mehedi Hasan Rakib", id: "0242220005101321" },
+};
+
+const LINKS = {
+  leader: [
+    { label: "GitHub", href: "https://github.com/zubair1325" },
+    {
+      label: "LinkedIn",
+      href: "https://www.linkedin.com/in/md-zubair-rahman/",
+    },
+  ],
+  member: [
+    {
+      label: "LinkedIn",
+      href: "https://www.linkedin.com/in/mehedi-hasan-rakib-a4627930b/",
+    },
+  ],
+};
+
+const ROWS = [
+  {
+    role: "Team Leader",
+    name: TEAM.leader.name,
+    id: TEAM.leader.id,
+    links: LINKS.leader,
+  },
+  {
+    role: "Team Member",
+    name: TEAM.member.name,
+    id: TEAM.member.id,
+    links: LINKS.member,
+  },
+];
+
 function App() {
   const [selectedDisease, setSelectedDisease] = useState("Alzheimer MRI");
   const [imageFile, setImageFile] = useState(null);
@@ -560,6 +596,209 @@ function App() {
           </div>
         ) : null}
       </section>
+
+      <footer className="credits-footer">
+        <h3 className="credits-footer__heading">Team Credits</h3>
+
+        <table className="credits-footer__table">
+          <thead>
+            <tr>
+              <th>Role</th>
+              <th>Name</th>
+              <th>Student ID</th>
+              <th>Links</th>
+            </tr>
+          </thead>
+          <tbody>
+            {ROWS.map((row) => (
+              <tr key={row.name} className="credits-footer__row">
+                <td className="credits-footer__role">{row.role}</td>
+                <td className="credits-footer__name">{row.name}</td>
+                <td className="credits-footer__id">Student ID: {row.id}</td>
+                <td className="credits-footer__links">
+                  {row.links.map((link, i) => (
+                    <>
+                      <a
+                        href={link.href}
+                        className="credits-footer__link"
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        {link.label}
+                      </a>
+                      {i < row.links.length - 1 && (
+                        <span className="credits-footer__sep">·</span>
+                      )}
+                    </>
+                  ))}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+
+        <style>{`
+          .credits-footer {
+            --bg-1: #0a0f1e;
+            --bg-2: #060912;
+            --border: rgba(148, 163, 184, 0.12);
+            --text-primary: #e6ebf5;
+            --text-muted: #94a3b8;
+            --accent-green: #4ade80;
+            --accent-blue: #60a5fa;
+
+            background: linear-gradient(135deg, var(--bg-1) 0%, var(--bg-2) 100%);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 28px 36px;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, sans-serif;
+            max-width: 960px;
+            margin: 0 auto;
+          }
+
+          .credits-footer__heading {
+            margin: 0 0 18px;
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: var(--text-primary);
+          }
+
+          .credits-footer__table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 14px;
+          }
+
+          .credits-footer__table thead th {
+            text-align: left;
+            padding: 0 16px 10px;
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            color: var(--text-muted);
+            border-bottom: 1px solid var(--border);
+          }
+
+          .credits-footer__table thead th:first-child {
+            padding-left: 0;
+          }
+
+          .credits-footer__row {
+            transition: background-color 0.25s ease, transform 0.25s ease;
+          }
+
+          .credits-footer__row:hover {
+            background-color: rgba(96, 165, 250, 0.06);
+            transform: translateX(4px);
+          }
+
+          .credits-footer__row td {
+            padding: 14px 16px;
+            border-bottom: 1px solid var(--border);
+            vertical-align: middle;
+            transition: color 0.25s ease;
+          }
+
+          .credits-footer__row td:first-child {
+            padding-left: 0;
+          }
+
+          .credits-footer__row:last-child td {
+            border-bottom: none;
+          }
+
+          .credits-footer__role {
+            color: var(--text-muted);
+            font-weight: 600;
+            white-space: nowrap;
+          }
+
+          .credits-footer__name {
+            color: var(--text-primary);
+            font-weight: 600;
+            white-space: nowrap;
+          }
+
+          .credits-footer__id {
+            color: var(--accent-green);
+            font-weight: 600;
+            white-space: nowrap;
+            transition: text-shadow 0.25s ease;
+          }
+
+          .credits-footer__row:hover .credits-footer__id {
+            text-shadow: 0 0 12px rgba(74, 222, 128, 0.5);
+          }
+
+          .credits-footer__links {
+            white-space: nowrap;
+          }
+
+          .credits-footer__link {
+            position: relative;
+            color: var(--accent-blue);
+            text-decoration: none;
+            transition: color 0.2s ease;
+          }
+
+          .credits-footer__link::after {
+            content: "";
+            position: absolute;
+            left: 0;
+            bottom: -2px;
+            width: 0;
+            height: 1px;
+            background: var(--accent-blue);
+            transition: width 0.25s ease;
+          }
+
+          .credits-footer__link:hover {
+            color: #93c5fd;
+          }
+
+          .credits-footer__link:hover::after {
+            width: 100%;
+          }
+
+          .credits-footer__sep {
+            margin: 0 6px;
+            color: var(--text-muted);
+          }
+
+          @media (max-width: 640px) {
+            .credits-footer__table,
+            .credits-footer__table thead,
+            .credits-footer__table tbody,
+            .credits-footer__table th,
+            .credits-footer__table td,
+            .credits-footer__table tr {
+              display: block;
+            }
+
+            .credits-footer__table thead {
+              display: none;
+            }
+
+            .credits-footer__row {
+              padding: 14px 0;
+              border-bottom: 1px solid var(--border);
+            }
+
+            .credits-footer__row td {
+              border-bottom: none;
+              padding: 3px 0;
+            }
+
+            .credits-footer__row:hover {
+              transform: none;
+              padding-left: 8px;
+            }
+          }
+        `}</style>
+      </footer>
     </main>
   );
 }
