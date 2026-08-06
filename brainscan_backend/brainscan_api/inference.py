@@ -325,6 +325,8 @@ def _generate_gemini_explanation(
     confidence: float,
     original_image: Image.Image | None = None,
     grad_image: Image.Image | None = None,
+    original_image_2: Image.Image | None = None,
+    grad_image_2: Image.Image | None = None,
     extra_context: str = '',
 ):
     api_key = os.getenv('GEMINI_API_KEY')
@@ -366,12 +368,7 @@ def _generate_gemini_explanation(
             types.Part.from_text(
                 text=json_output_instructions,
             ),
-            types.Part.from_text(
-                text='Example JSON (use EXACT keys and types):',
-            ),
-            types.Part.from_text(
-                text=example_json,
-            ),
+            # Example JSON removed to reduce prompt token usage
             types.Part.from_text(
                 text=f'Scan type: {disease_label}.',
             ),
@@ -414,6 +411,9 @@ def _generate_gemini_explanation(
     except Exception as e:
         print('Error printing prepared Gemini request:', repr(e))
 
+    # server-side image data URLs to return if the model response omits image_references
+    server_images: dict = {}
+
     if original_image is not None:
         # Downsample original image to limit token cost of multimodal input
         try:
@@ -430,6 +430,13 @@ def _generate_gemini_explanation(
                     mime_type='image/jpeg',
                 )
             )
+            # include server-side base64 for frontend
+            try:
+                b = _pil_image_to_bytes(img_copy, format='JPEG')
+                server_images_key = 'original_mri' if original_image_2 is not None else 'original'
+                server_images[server_images_key] = f"data:image/jpeg;base64,{base64.b64encode(b).decode('utf-8')}"
+            except Exception:
+                pass
         except Exception:
             # fallback to original if resizing fails
             contents[0].parts.append(
@@ -438,6 +445,42 @@ def _generate_gemini_explanation(
             contents[0].parts.append(
                 types.Part.from_bytes(data=_pil_image_to_bytes(original_image, format='JPEG'), mime_type='image/jpeg')
             )
+            try:
+                b = _pil_image_to_bytes(original_image, format='JPEG')
+                server_images_key = 'original_mri' if original_image_2 is not None else 'original'
+                server_images[server_images_key] = f"data:image/jpeg;base64,{base64.b64encode(b).decode('utf-8')}"
+            except Exception:
+                pass
+
+    # If a second original (CT) image is provided, attach it as well
+    if original_image_2 is not None:
+        try:
+            img2_copy = original_image_2.copy()
+            img2_copy.thumbnail((512, 512))
+            contents[0].parts.append(
+                types.Part.from_text(
+                    text='Original CT uploaded image (resized 512x512): see attached image below.',
+                )
+            )
+            contents[0].parts.append(
+                types.Part.from_bytes(
+                    data=_pil_image_to_bytes(img2_copy, format='JPEG'),
+                    mime_type='image/jpeg',
+                )
+            )
+            try:
+                b2 = _pil_image_to_bytes(img2_copy, format='JPEG')
+                server_images['original_ct'] = f"data:image/jpeg;base64,{base64.b64encode(b2).decode('utf-8')}"
+            except Exception:
+                pass
+        except Exception:
+            contents[0].parts.append(types.Part.from_text(text='Original CT uploaded image: see attached image below.'))
+            try:
+                contents[0].parts.append(types.Part.from_bytes(data=_pil_image_to_bytes(original_image_2, format='JPEG'), mime_type='image/jpeg'))
+                b2 = _pil_image_to_bytes(original_image_2, format='JPEG')
+                server_images['original_ct'] = f"data:image/jpeg;base64,{base64.b64encode(b2).decode('utf-8')}"
+            except Exception:
+                pass
 
     if grad_image is not None:
         try:
@@ -447,9 +490,42 @@ def _generate_gemini_explanation(
                 types.Part.from_text(text='Grad-CAM overlay image (resized 512x512): see attached image below.')
             )
             contents[0].parts.append(types.Part.from_bytes(data=_pil_image_to_bytes(g_copy, format='PNG'), mime_type='image/png'))
+            try:
+                gb = _pil_image_to_bytes(g_copy, format='PNG')
+                server_images_key = 'gradcam_mri' if grad_image_2 is not None else 'gradcam'
+                server_images[server_images_key] = f"data:image/png;base64,{base64.b64encode(gb).decode('utf-8')}"
+            except Exception:
+                pass
         except Exception:
             contents[0].parts.append(types.Part.from_text(text='Grad-CAM overlay image: see attached image below.'))
             contents[0].parts.append(types.Part.from_bytes(data=_pil_image_to_bytes(grad_image, format='PNG'), mime_type='image/png'))
+            try:
+                gb = _pil_image_to_bytes(grad_image, format='PNG')
+                server_images_key = 'gradcam_mri' if grad_image_2 is not None else 'gradcam'
+                server_images[server_images_key] = f"data:image/png;base64,{base64.b64encode(gb).decode('utf-8')}"
+            except Exception:
+                pass
+
+    # If a second grad image (CT Grad-CAM) is provided, attach it as well
+    if grad_image_2 is not None:
+        try:
+            g2_copy = grad_image_2.copy()
+            g2_copy.thumbnail((512, 512))
+            contents[0].parts.append(types.Part.from_text(text='Grad-CAM CT overlay image (resized 512x512): see attached image below.'))
+            contents[0].parts.append(types.Part.from_bytes(data=_pil_image_to_bytes(g2_copy, format='PNG'), mime_type='image/png'))
+            try:
+                g2b = _pil_image_to_bytes(g2_copy, format='PNG')
+                server_images['gradcam_ct'] = f"data:image/png;base64,{base64.b64encode(g2b).decode('utf-8')}"
+            except Exception:
+                pass
+        except Exception:
+            contents[0].parts.append(types.Part.from_text(text='Grad-CAM CT overlay image: see attached image below.'))
+            try:
+                contents[0].parts.append(types.Part.from_bytes(data=_pil_image_to_bytes(grad_image_2, format='PNG'), mime_type='image/png'))
+                g2b = _pil_image_to_bytes(grad_image_2, format='PNG')
+                server_images['gradcam_ct'] = f"data:image/png;base64,{base64.b64encode(g2b).decode('utf-8')}"
+            except Exception:
+                pass
 
     if not api_key:
         return _build_default_explanation(
@@ -458,6 +534,21 @@ def _generate_gemini_explanation(
             confidence,
             extra_context=extra_context,
         ), 'fallback'
+
+    # helper to merge server-side images into parsed image_references
+    def _merge_server_images(parsed_obj):
+        try:
+            if isinstance(parsed_obj, dict):
+                ir = parsed_obj.get('image_references') or {}
+                if not isinstance(ir, dict):
+                    ir = {}
+                for k, v in server_images.items():
+                    if v is not None and k not in ir:
+                        ir[k] = v
+                parsed_obj['image_references'] = ir
+        except Exception:
+            pass
+        return parsed_obj
 
     try:
         from google import genai
@@ -575,8 +666,13 @@ def _generate_gemini_explanation(
                     if text:
                             # Prefer structured JSON per instructions. Try to parse and return JSON.
                             import json, re
+                            continuation_used = False
+                            last_cont_text = None
+                            last_combined = None
                             try:
                                 parsed = json.loads(text)
+                                if isinstance(parsed, dict):
+                                    parsed = _merge_server_images(parsed)
                                 return (parsed, 'AI')
                             except Exception:
                                 # attempt to recover malformed JSON and parse again
@@ -590,16 +686,11 @@ def _generate_gemini_explanation(
                                         candidate += '}' * (open_braces - close_braces)
                                     try:
                                         parsed = json.loads(candidate)
+                                        if isinstance(parsed, dict):
+                                            parsed = _merge_server_images(parsed)
                                         return (parsed, 'AI')
                                     except Exception:
                                         pass
-
-                            # If the model stopped because of token limits or parsing failed,
-                            # attempt a short auto-retry to continue the JSON object.
-                            try:
-                                finish_reason = getattr(response.candidates[0], 'finish_reason', None)
-                            except Exception:
-                                finish_reason = None
 
                             # Retry up to 2 times to continue the JSON
                             for attempt in range(2):
@@ -636,11 +727,18 @@ def _generate_gemini_explanation(
                                                 if getattr(p, 'text', None)
                                             ]).strip()
 
+                                    last_cont_text = cont_text
+
                                     if cont_text:
                                         # Append continuation and attempt to parse full JSON
                                         combined = text + cont_text
+                                        last_combined = combined
                                         try:
                                             parsed = json.loads(combined)
+                                            continuation_used = True
+                                            if isinstance(parsed, dict):
+                                                parsed = _merge_server_images(parsed)
+                                            parsed['retried'] = True
                                             return (parsed, 'AI')
                                         except Exception:
                                             # try the same repair approach on combined
@@ -654,12 +752,26 @@ def _generate_gemini_explanation(
                                                     candidate += '}' * (open_braces - close_braces)
                                                 try:
                                                     parsed = json.loads(candidate)
+                                                    continuation_used = True
+                                                    if isinstance(parsed, dict):
+                                                        parsed = _merge_server_images(parsed)
+                                                    parsed['retried'] = True
                                                     return (parsed, 'AI')
                                                 except Exception:
                                                     pass
                                     # if continuation didn't help, try next attempt
                                 except Exception:
                                     continue
+
+                            # If parsing still fails, log helpful debug info then fall back to raw text
+                            try:
+                                print('GEMINI PARSE FAILED. raw_text preview:', text[:2000])
+                                if last_cont_text:
+                                    print('GEMINI last_cont_text preview:', last_cont_text[:2000])
+                                if last_combined:
+                                    print('GEMINI last_combined preview:', last_combined[:2000])
+                            except Exception:
+                                pass
 
                             # If parsing still fails, fall back to raw text but label as unstructured AI
                             return (text, 'AI-unstructured')
@@ -722,12 +834,63 @@ def predict_image(disease_label: str, uploaded_files):
             confidence,
             original_image=mri_image,
             grad_image=build_gradcam_pil(model, mri_tensor),
+            original_image_2=ct_image,
+            grad_image_2=build_gradcam_pil(model, ct_tensor),
             extra_context=(
                 f'MRI confidence: {mri_confidence:.4f}. '
                 f'CT confidence: {ct_confidence:.4f}. '
                 f'MRI result: {mri_prediction}. CT result: {ct_prediction}.'
             ),
         )
+        # Normalize explanation into a dict with image_references and retried flag
+        if not isinstance(explanation, dict):
+            # build server-side image data for fallback
+            srv_imgs = {}
+            try:
+                b = _pil_image_to_bytes(mri_image.copy().resize((512, 512)), format='JPEG')
+                srv_imgs['original_mri'] = f"data:image/jpeg;base64,{base64.b64encode(b).decode('utf-8')}"
+            except Exception:
+                pass
+            if mri_grad_cam:
+                srv_imgs['gradcam_mri'] = f"data:image/png;base64,{mri_grad_cam}"
+
+            if ct_image is not None:
+                try:
+                    b2 = _pil_image_to_bytes(ct_image.copy().resize((512, 512)), format='JPEG')
+                    srv_imgs['original_ct'] = f"data:image/jpeg;base64,{base64.b64encode(b2).decode('utf-8')}"
+                except Exception:
+                    pass
+            if ct_grad_cam:
+                srv_imgs['gradcam_ct'] = f"data:image/png;base64,{ct_grad_cam}"
+
+            explanation = {
+                'text': explanation,
+                'image_references': srv_imgs or {'original': 'full_scan', 'gradcam': 'heatmap_overlay'},
+                'retried': False,
+            }
+        else:
+            if not explanation.get('image_references'):
+                explanation['image_references'] = {}
+            # add any missing server-side images
+            try:
+                if 'original_mri' not in explanation['image_references']:
+                    b = _pil_image_to_bytes(mri_image.copy().resize((512, 512)), format='JPEG')
+                    explanation['image_references']['original_mri'] = f"data:image/jpeg;base64,{base64.b64encode(b).decode('utf-8')}"
+            except Exception:
+                pass
+            if mri_grad_cam and 'gradcam_mri' not in explanation['image_references']:
+                explanation['image_references']['gradcam_mri'] = f"data:image/png;base64,{mri_grad_cam}"
+            try:
+                if ct_image is not None and 'original_ct' not in explanation['image_references']:
+                    b2 = _pil_image_to_bytes(ct_image.copy().resize((512, 512)), format='JPEG')
+                    explanation['image_references']['original_ct'] = f"data:image/jpeg;base64,{base64.b64encode(b2).decode('utf-8')}"
+            except Exception:
+                pass
+            if ct_grad_cam and 'gradcam_ct' not in explanation['image_references']:
+                explanation['image_references']['gradcam_ct'] = f"data:image/png;base64,{ct_grad_cam}"
+            if 'retried' not in explanation:
+                explanation['retried'] = False
+
         return {
             'prediction': predicted_label,
             'confidence_score': f'MRI {mri_confidence:.4f}, CT {ct_confidence:.4f}',
@@ -758,6 +921,37 @@ def predict_image(disease_label: str, uploaded_files):
         original_image=image,
         grad_image=build_gradcam_pil(model, tensor),
     )
+
+    # Normalize explanation into a dict with image_references and retried flag
+    if not isinstance(explanation, dict):
+        srv = {}
+        try:
+            b = _pil_image_to_bytes(image.copy().resize((512, 512)), format='JPEG')
+            srv['original'] = f"data:image/jpeg;base64,{base64.b64encode(b).decode('utf-8')}"
+        except Exception:
+            pass
+        if grad_cam:
+            srv['gradcam'] = f"data:image/png;base64,{grad_cam}"
+
+        explanation = {
+            'text': explanation,
+            'image_references': srv or {'original': 'full_scan', 'gradcam': 'heatmap_overlay'},
+            'retried': False,
+        }
+    else:
+        if not explanation.get('image_references'):
+            explanation['image_references'] = {}
+        try:
+            if 'original' not in explanation['image_references']:
+                b = _pil_image_to_bytes(image.copy().resize((512, 512)), format='JPEG')
+                explanation['image_references']['original'] = f"data:image/jpeg;base64,{base64.b64encode(b).decode('utf-8')}"
+        except Exception:
+            pass
+        if grad_cam and 'gradcam' not in explanation['image_references']:
+            explanation['image_references']['gradcam'] = f"data:image/png;base64,{grad_cam}"
+        if 'retried' not in explanation:
+            explanation['retried'] = False
+
     return {
         'prediction': predicted_label,
         'confidence_score': f'{confidence:.4f}',

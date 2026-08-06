@@ -1,8 +1,16 @@
 # BrainScan
 
-BrainScan is a full-stack medical image classification and interpretation project for brain diseases using MRI and CT scans. The project combines a React + Vite frontend with a Django backend, and it is designed to receive a user-uploaded scan image, run disease-specific model inference, compute a confidence score, generate a Grad-CAM visualization, and return an AI-generated explanation.
+BrainScan is a full-stack medical imaging application for brain disease classification and interpretation using MRI and CT scans. The project combines a React + Vite frontend with a Django backend and supports both single-image inference and a dual-image MRI + CT workflow for brain tumor analysis.
 
-The system currently supports the following disease categories:
+The current system can:
+
+- classify brain disease categories from uploaded scans
+- generate a confidence score
+- create a Grad-CAM visualization
+- return an explanation for the prediction
+- optionally use the Google Gemini API for structured radiology-style JSON output
+
+Supported disease categories:
 
 - Alzheimer MRI
 - Brain Stroke CT Scan
@@ -13,240 +21,434 @@ The system currently supports the following disease categories:
 
 ---
 
-## Project purpose
+## 1. Project purpose
 
-The application was built to demonstrate an end-to-end clinical-style prediction pipeline:
+BrainScan was built to demonstrate an end-to-end medical image analysis pipeline that mirrors a simplified clinical workflow:
 
-1. User selects a disease category in the frontend.
-2. User uploads an MRI or CT image.
-3. React sends the request to Django.
-4. Django receives the multipart request.
-5. The backend preprocesses the image.
-6. A saved PyTorch `.pth` model is loaded.
-7. The model predicts the label and confidence.
-8. A Grad-CAM heatmap is generated.
-9. An explanation is returned to the frontend.
+1. A user selects a disease category in the frontend.
+2. A scan image is uploaded.
+3. The frontend sends the file to the Django API.
+4. The backend preprocesses the image.
+5. The appropriate saved PyTorch model is loaded from the repository.
+6. The model predicts the class and confidence.
+7. A Grad-CAM heatmap is generated for visual explanation.
+8. A plain-language or Gemini-generated explanation is returned to the UI.
+
+This project is intended for educational, research, and demonstration purposes and should not be used as a substitute for professional medical diagnosis.
 
 ---
 
-## High-level architecture
+## 2. High-level architecture
 
 ### Frontend
 
 - Framework: React + Vite
-- Main UI file: `frontend/src/App.jsx`
+- Main UI: `frontend/src/App.jsx`
 - Styling: `frontend/src/App.css`
-- Build and dev server setup: `frontend/package.json`
+- Package manager: npm
+- Dev server: Vite
 
 ### Backend
 
 - Framework: Django
 - API app: `brainscan_backend/brainscan_api`
 - Project settings: `brainscan_backend/brainscan_backend/settings.py`
-- API route: `brainscan_backend/brainscan_api/urls.py`
+- API routing: `brainscan_backend/brainscan_api/urls.py`
 - Request handler: `brainscan_backend/brainscan_api/views.py`
 - Inference engine: `brainscan_backend/brainscan_api/inference.py`
 
 ### Model storage
 
-The saved model artifacts are kept under the `Saved Model/` folder.
-
-Included winner-model artifacts:
-
-- `Saved Model/Alzheimer MRI/ConvNeXt_Tiny_best.pth`
-- `Saved Model/Brain Stroke CT Scan/DenseNet121_best.pth`
-- `Saved Model/Brain Tumor/Brain Tumor CT Scan/DenseNet121_best.pth`
-- `Saved Model/Brain Tumor/Brain Tumor MRI/DenseNet121_best.pth`
-- `Saved Model/Brain Tumor/Brain Tumor MRI + CT Scan/DenseNet121_best.pth`
-- `Saved Model/Parkinson’s Disease MRI/ConvNeXt_Tiny_best.pth`
+Saved model weights are stored under the `Saved Model/` directory.
 
 ---
 
-## What was implemented from the start to the current state
+## 3. Technology stack
 
-### 1. Frontend UI
+### Python backend
 
-The frontend was replaced with a BrainScan medical dashboard that includes:
+- Python 3.10+
+- Django
+- Django REST Framework
+- django-cors-headers
+- python-dotenv
+- PyTorch
+- TorchVision
+- OpenCV (`cv2`)
+- Pillow (`PIL`)
+- NumPy
+- Google GenAI SDK (`google.genai`)
 
-- disease category dropdown
-- image file input
-- submit button
-- processing/loading state
-- result card showing:
-  - predicted label
-  - confidence score
-  - AI explanation
-  - Grad-CAM image
+### Frontend
 
-The frontend logic is centralized in `frontend/src/App.jsx`.
-
-### 2. API proxy setup for local development
-
-Vite is configured to proxy `/api` requests to Django:
-
-- file: `frontend/vite.config.js`
-
-This allows the React app to keep the API call path clean while the Django backend serves the actual inference route.
-
-### 3. Django project runtime configuration
-
-The Django project was updated with:
-
-- `rest_framework`
-- `corsheaders`
-- `brainscan_api` app registration
-- `ALLOWED_HOSTS` configured for local testing
-- CORS enabled for frontend-to-backend communication
-
-Relevant settings file:
-
-- `brainscan_backend/brainscan_backend/settings.py`
-
-### 4. Django API route
-
-The API endpoint is exposed as:
-
-- `POST /api/predict/`
-
-The route is declared in:
-
-- `brainscan_backend/brainscan_api/urls.py`
-
-### 5. Upload handler
-
-The view receives:
-
-- the selected disease label from `request.POST['disease']`
-- the uploaded image file from `request.FILES['image']`
-
-Then it delegates the work to the real inference function.
-
-Relevant file:
-
-- `brainscan_backend/brainscan_api/views.py`
-
-### 6. Real inference pipeline
-
-The backend inference engine in `brainscan_backend/brainscan_api/inference.py` now performs the following steps:
-
-- resolves the appropriate model path from the disease label
-- loads the saved `.pth` state dictionary on CPU
-- reconstructs the correct model architecture family
-- preprocesses the uploaded image into the expected tensor format
-- runs the forward pass
-- extracts predicted class and confidence score
-- builds a Grad-CAM heatmap overlay
-- returns a JSON payload to the frontend
-
-### 7. Exact model-family distinction
-
-The model loader resolves the correct architecture choice based on the disease label, and the file structure precisely reflects that split.
-
-Implemented architecture behavior:
-
-- ConvNeXt Tiny legacy family for the Alzheimer MRI and Parkinsons MRI checkpoints
-- DenseNet 121 family for the single-image stroke and tumor checkpoints
-- a shared-backbone dual-head DenseNet 121 family for the combined Brain Tumor MRI and CT Scan workflow
-
-#### Single-image disease families
-
-- `Alzheimer MRI` → ConvNeXt Tiny legacy checkpoint
-- `Parkinsons MRI` → ConvNeXt Tiny legacy checkpoint
-- `Brain Stroke CT Scan` → DenseNet 121 checkpoint
-- `Brain Tumor CT Scan` → DenseNet 121 checkpoint
-- `Brain Tumor MRI` → DenseNet 121 checkpoint
-
-#### Combined MRI + CT family
-
-- `Brain Tumor MRI and CT Scan` → `SharedDenseNetDualHead`
-  - one upload for the MRI image
-  - one upload for the CT image
-  - the model runs through a common DenseNet backbone and then uses separate MRI and CT prediction heads
-  - the current backend produces the final prediction from the MRI head path for the combined-class workflow
-
-### 8. Grad-CAM generation
-
-The backend builds a Grad-CAM activation map using the chosen model’s final high-level convolutional layer, then blends it with the input image to produce a visualization.
-
-### 9. Explanation generation path
-
-The project is designed to return a natural-language explanation for the prediction.
-
-Behavior:
-
-- If no Gemini key exists, the backend returns a safe fallback explanation.
-- If the key exists, the backend attempts Gemini-based explanation generation.
-- If the provider rejects the key or project access, the code falls back to the safe static explanation text.
-
-### 10. Final runtime verification
-
-The project was verified through the real Django test client with a multipart upload request against the actual `/api/predict/` route.
-
-Verified result from the last runtime proof:
-
-- status = `200`
-- prediction = `VeryMildDemented`
-- confidence score = `0.9243`
-- explanation field returned in JSON payload
-
-This confirms that the endpoint is now returning a real structured prediction response from the backend.
+- React 19
+- Vite
+- Zod
 
 ---
 
-## Current request/response contract
+## 4. Project structure
 
-### Frontend request
+```text
+.
+├── README.md
+├── manage.py
+├── .env
+├── backend/
+├── brainscan_backend/
+│   ├── manage.py
+│   ├── db.sqlite3
+│   ├── brainscan_api/
+│   │   ├── inference.py
+│   │   ├── views.py
+│   │   ├── urls.py
+│   │   └── models.py
+│   └── brainscan_backend/
+│       ├── settings.py
+│       ├── urls.py
+│       └── wsgi.py
+├── frontend/
+│   ├── package.json
+│   ├── vite.config.js
+│   ├── index.html
+│   └── src/
+│       ├── App.jsx
+│       ├── App.css
+│       └── main.jsx
+├── Saved Model/
+├── Colab Files/
+└── scripts/
+```
 
-The frontend sends a multipart form request with:
+---
 
-- `disease`
-- `image` for the standard single-input disease categories
-- `mri_image` and `ct_image` for `Brain Tumor MRI and CT Scan`
+## 5. Prerequisites
 
-For the combined tumor choice, the request contract is intentionally different because that model is a multi-head shared-backbone system rather than a standard single-input DenseNet 121 classifier.
+Before installing the project, make sure you have the following tools available:
 
-### Backend response shape
+- Python 3.10 or newer
+- Node.js 18+ and npm
+- A terminal with PowerShell, bash, or cmd
+- Optional: a Google Gemini API key for AI explanations
 
-The backend returns a JSON payload like this:
+If you are using Windows PowerShell, the commands below are written for that shell.
+
+---
+
+## 6. Installation
+
+### 6.1 Clone the repository
+
+```powershell
+git clone <your-repo-url>
+cd "Deep Learning-Based Automated Classification and Interpretation of Brain Diseases Using MRI and CT scan"
+```
+
+### 6.2 Create and activate a Python virtual environment
+
+```powershell
+py -3 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+```
+
+If PowerShell blocks activation, run:
+
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy RemoteSigned
+```
+
+### 6.3 Install Python dependencies
+
+Upgrade pip first:
+
+```powershell
+python -m pip install --upgrade pip
+```
+
+Install the required packages:
+
+```powershell
+pip install django djangorestframework django-cors-headers python-dotenv google-genai opencv-python pillow numpy torch torchvision
+```
+
+> Note: `torch` and `torchvision` are large packages. If you are using a GPU, install the CUDA-enabled build that matches your machine. The current project works with the CPU build on most systems.
+
+### 6.4 Install frontend dependencies
+
+```powershell
+cd frontend
+npm install
+```
+
+### 6.5 Create the environment file
+
+Create a `.env` file in the project root if it does not already exist.
+
+Example:
+
+```env
+GEMINI_API_KEY=your_google_gemini_api_key_here
+```
+
+- If `GEMINI_API_KEY` is not set, the backend will fall back to a safe rule-based explanation.
+- If the key is present but invalid or inaccessible, the system still falls back gracefully.
+
+---
+
+## 7. How to run the project
+
+### 7.1 Start the Django backend
+
+From the project root:
+
+```powershell
+cd brainscan_backend
+python manage.py migrate
+python manage.py runserver 8000
+```
+
+The API will be available at:
+
+- http://127.0.0.1:8000/api/predict/
+
+### 7.2 Start the React frontend
+
+Open a second terminal:
+
+```powershell
+cd frontend
+npm run dev
+```
+
+The frontend will usually be available at:
+
+- http://localhost:5173
+
+The Vite dev server is configured to proxy `/api` requests to the Django backend.
+
+---
+
+## 8. API usage
+
+### Endpoint
+
+```http
+POST /api/predict/
+```
+
+### Request format
+
+The API accepts multipart form data.
+
+#### Single-image disease categories
+
+Send:
+
+- `disease`: disease label
+- `image`: uploaded image file
+
+Example fields:
+
+- `disease=Alzheimer MRI`
+- `image=@scan.png`
+
+#### Dual-image workflow
+
+For `Brain Tumor MRI and CT Scan`, send:
+
+- `disease=Brain Tumor MRI and CT Scan`
+- `mri_image`: MRI file
+- `ct_image`: CT file
+
+This is the dual-input path used by the combined tumor workflow. The backend receives both files, processes them through the shared dual-head inference pipeline, and returns the combined result.
+
+### Example with curl
+
+Single-image example:
+
+```powershell
+curl -X POST "http://127.0.0.1:8000/api/predict/" -F "disease=Alzheimer MRI" -F "image=@C:\path\to\scan.png"
+```
+
+Dual-image example:
+
+```powershell
+curl -X POST "http://127.0.0.1:8000/api/predict/" -F "disease=Brain Tumor MRI and CT Scan" -F "mri_image=@C:\path\to\mri.png" -F "ct_image=@C:\path\to\ct.png"
+```
+
+### Response structure
+
+The backend returns a JSON object similar to:
 
 ```json
 {
   "prediction": "VeryMildDemented",
   "confidence_score": "0.9243",
   "grad_cam": "base64-encoded-png-string",
-  "explanation": "Human-readable explanation or fallback text"
+  "explanation": "Human-readable explanation or fallback text",
+  "explanation_source": "AI",
+  "grad_cam_mri": "base64-encoded-png-string",
+  "grad_cam_ct": "base64-encoded-png-string"
 }
 ```
 
+Important response details:
+
+- `prediction`: the predicted disease class or stage label
+- `confidence_score`: numeric or string confidence output from the backend
+- `grad_cam`: single-image Grad-CAM output for standard workflows
+- `grad_cam_mri` and `grad_cam_ct`: Grad-CAM outputs for the MRI + CT dual workflow
+- `explanation`: plain-text fallback explanation or structured AI result
+- `explanation_source`: indicates whether the explanation came from AI generation or fallback logic
+
+Depending on the backend configuration, the `explanation` field may be a plain string or a structured object containing AI-generated keys such as `summary`, `imaging_findings`, `interpretation`, and `image_references`.
+
 ---
 
-## Project files notable at a glance
+## 9. Model details
 
-### Root project
+The project uses saved PyTorch checkpoints stored in the [Saved Model](Saved%20Model) directory.
 
-- `manage.py`
-- `.env`
-- `README.md`
+### Available model artifacts
 
-### Backend root
+| Disease category            | Model file                                                                                                                                                     | Architecture family       |
+| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------- |
+| Alzheimer MRI               | [Saved Model/Alzheimer MRI/ConvNeXt_Tiny_best.pth](Saved%20Model/Alzheimer%20MRI/ConvNeXt_Tiny_best.pth)                                                       | ConvNeXt Tiny legacy      |
+| Brain Stroke CT Scan        | [Saved Model/Brain Stroke CT Scan/DenseNet121_best.pth](Saved%20Model/Brain%20Stroke%20CT%20Scan/DenseNet121_best.pth)                                         | DenseNet 121              |
+| Brain Tumor CT Scan         | [Saved Model/Brain Tumor/Brain Tumor CT Scan/DenseNet121_best.pth](Saved%20Model/Brain%20Tumor/Brain%20Tumor%20CT%20Scan/DenseNet121_best.pth)                 | DenseNet 121              |
+| Brain Tumor MRI             | [Saved Model/Brain Tumor/Brain Tumor MRI/DenseNet121_best.pth](Saved%20Model/Brain%20Tumor/Brain%20Tumor%20MRI/DenseNet121_best.pth)                           | DenseNet 121              |
+| Brain Tumor MRI and CT Scan | [Saved Model/Brain Tumor/Brain Tumor MRI + CT Scan/DenseNet121_best.pth](Saved%20Model/Brain%20Tumor/Brain%20Tumor%20MRI%20+%20CT%20Scan/DenseNet121_best.pth) | Shared DenseNet dual-head |
+| Parkinsons MRI              | [Saved Model/Parkinson’s Disease MRI/ConvNeXt_Tiny_best.pth](Saved%20Model/Parkinson%E2%80%99s%20Disease%20MRI/ConvNeXt_Tiny_best.pth)                         | ConvNeXt Tiny legacy      |
 
-- `brainscan_backend/manage.py`
-- `brainscan_backend/brainscan_backend/settings.py`
-- `brainscan_backend/brainscan_backend/urls.py`
-- `brainscan_backend/brainscan_api/views.py`
-- `brainscan_backend/brainscan_api/inference.py`
-- `brainscan_backend/brainscan_api/urls.py`
+### How the backend chooses the model
 
-### Frontend root
+The inference script resolves the correct architecture based on the selected disease:
 
-- `frontend/package.json`
-- `frontend/vite.config.js`
-- `frontend/src/App.jsx`
-- `frontend/src/App.css`
+- `Alzheimer MRI` and `Parkinsons MRI` use a ConvNeXt-based legacy model.
+- Single-image stroke and tumor categories use a DenseNet 121 classifier.
+- `Brain Tumor MRI and CT Scan` uses a custom dual-head DenseNet architecture that accepts both MRI and CT images.
 
-### Saved models
+### Preprocessing used for inference
 
-- `Saved Model/`
+Each uploaded image is:
+
+- opened as a PIL image
+- converted to RGB
+- resized to 224x224
+- converted to a tensor
+- normalized using ImageNet statistics
+
+### Grad-CAM generation
+
+The backend creates a Grad-CAM heatmap from the model’s deeper feature maps and overlays it onto the input image so the UI can show the visual explanation.
+
+---
+
+## 10. Explanation generation
+
+The backend can produce explanations in two ways:
+
+1. Rule-based fallback explanation
+   - Used when no Gemini API key is available or when the API call fails.
+   - Always returns a safe, human-readable explanation.
+   - This is the default behavior for local runs when the environment is not configured for Gemini.
+
+2. Gemini-assisted explanation
+   - Enabled when `GEMINI_API_KEY` is present.
+   - The backend asks Gemini for a structured JSON response with fields such as:
+     - `summary`
+     - `detailed_visual_description`
+     - `imaging_findings`
+     - `interpretation`
+     - `confidence`
+     - `image_references`
+   - The frontend renders these explanation sections and image references when they are returned by the backend.
+
+### Grad-CAM and Gemini flow
+
+The inference pipeline follows this sequence:
+
+1. The uploaded image is preprocessed and passed through the selected model.
+2. The model produces a prediction and confidence score.
+3. A Grad-CAM heatmap is generated to highlight important image regions.
+4. The backend either returns a fallback explanation or sends the image context to Gemini for a richer report.
+5. The frontend displays the prediction, confidence, Grad-CAM, and explanation in the result panel.
+
+---
+
+## 11. Notes about the frontend
+
+The React UI supports:
+
+- selecting the disease category
+- uploading one image or two images for the combined brain tumor workflow
+- showing prediction results
+- displaying confidence
+- rendering Grad-CAM images
+- displaying AI explanation sections when available
+
+The frontend relies on the Django backend for all inference and explanation generation.
+
+---
+
+## 12. Common troubleshooting
+
+### Model file missing
+
+If you get an error like `Model artifact missing`, verify that the corresponding `.pth` file exists under [Saved Model](Saved%20Model).
+
+### Backend cannot connect to the frontend
+
+If the frontend cannot talk to Django, ensure:
+
+- the Django server is running
+- the frontend is using the Vite proxy correctly
+- CORS is enabled in the Django settings
+- the API is reachable at `http://127.0.0.1:8000/api/predict/`
+
+### Import errors
+
+If Python throws package import errors, reinstall the backend dependencies in the active virtual environment:
+
+```powershell
+pip install django djangorestframework django-cors-headers python-dotenv google-genai opencv-python pillow numpy torch torchvision
+```
+
+### Gemini errors
+
+If the explanation generation fails:
+
+- verify that `GEMINI_API_KEY` exists in the `.env` file
+- confirm the key is valid
+- check the backend console output for the provider error
+- remember that the app will still work with the fallback explanation if Gemini access is unavailable
+
+### Frontend build or dev-server issues
+
+If the frontend fails to start:
+
+- run `npm install` inside the `frontend` folder
+- confirm Node.js 18+ is installed
+- restart the Vite dev server after installing new packages
+
+---
+
+## 13. Important usage note
+
+This project is a demonstration of an AI-assisted medical image analysis workflow. It is useful for development, experimentation, and educational purposes, but it should not be considered a certified clinical tool or a substitute for diagnosis by a qualified medical professional.
+
+---
+
+## 14. Suggested next steps
+
+You can extend this project by:
+
+- adding more disease categories
+- improving the model training pipeline
+- adding image preprocessing quality checks
+- adding user authentication
+- deploying the frontend and backend separately
+- adding automated tests for the API and inference flow
 
 ---
 

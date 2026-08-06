@@ -209,6 +209,16 @@ button:disabled {
   font-size: 0.95rem;
 }
 
+.continuation-warning {
+  margin-top: 10px;
+  padding: 10px;
+  border-radius: 10px;
+  background: rgba(253, 224, 71, 0.12);
+  border: 1px solid rgba(253, 224, 71, 0.28);
+  color: #fef3c7;
+  font-size: 0.9rem;
+}
+
 .gradcam-image {
   max-width: 100%;
   border-radius: 16px;

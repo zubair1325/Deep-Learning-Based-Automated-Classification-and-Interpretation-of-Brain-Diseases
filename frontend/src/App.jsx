@@ -43,96 +43,58 @@ function App() {
   });
 
   const tryParseExplanation = (rawValue) => {
-    let value = rawValue;
+    if (rawValue == null) {
+      return null;
+    }
 
-    if (typeof value === "string") {
+    if (typeof rawValue === "string") {
       const sanitized = (text) => {
         const firstBrace = text.indexOf("{");
-        if (firstBrace === -1) {
-          return null;
-        }
-
-        let candidate = text.slice(firstBrace);
-        candidate = candidate.replace(/,\s*([\]}])/g, "$1");
-        candidate = candidate.replace(/\r?\n/g, " ");
-
-        const openBraces = candidate.split("{").length - 1;
-        const closeBraces = candidate.split("}").length - 1;
-        if (closeBraces < openBraces) {
-          candidate += "}".repeat(openBraces - closeBraces);
-        }
-
-        return candidate;
-      };
-
-      try {
-        return JSON.parse(value);
-      } catch {
-        const candidate = sanitized(value);
-        if (!candidate) {
-          return null;
+        const lastBrace = text.lastIndexOf("}");
+        if (firstBrace !== -1 && lastBrace !== -1 && firstBrace < lastBrace) {
+          const candidate = text.slice(firstBrace, lastBrace + 1);
+          try {
+            return JSON.parse(candidate);
+          } catch {
+            // fall through
+          }
         }
 
         try {
-          return JSON.parse(candidate);
+          return JSON.parse(text);
         } catch {
           return null;
         }
-      }
+      };
+
+      return sanitized(rawValue);
     }
 
-    return typeof value === "object" && value !== null ? value : null;
+    if (typeof rawValue === "object") {
+      return rawValue;
+    }
+
+    return null;
   };
 
-  const parsedExplanation = useMemo(() => {
-    const value = tryParseExplanation(result?.explanation);
-    if (!value || typeof value !== "object") {
-      return null;
+  const getImageSrc = (value) => {
+    if (!value || typeof value !== "string") {
+      return undefined;
     }
 
-    const parsed = explanationSchema.safeParse(value);
-    return parsed.success ? parsed.data : value;
-  }, [result?.explanation]);
+    if (value.startsWith("data:image/")) {
+      return value;
+    }
+
+    if (/^[A-Za-z0-9+/=]+$/.test(value)) {
+      return `data:image/png;base64,${value}`;
+    }
+
+    return value;
+  };
 
   const toTitle = (key) =>
     key.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
-
-  const renderExplanationValue = (value) => {
-    if (value == null || value === "") {
-      return null;
-    }
-
-    if (typeof value === "string") {
-      if (value.includes("\n")) {
-        return (
-          <ul className="detail-list">
-            {renderList(value).map((item, index) => (
-              <li key={index}>{item}</li>
-            ))}
-          </ul>
-        );
-      }
-      return <p>{value}</p>;
-    }
-
-    if (Array.isArray(value)) {
-      return (
-        <ul className="detail-list">
-          {value.map((item, index) => (
-            <li key={index}>{item}</li>
-          ))}
-        </ul>
-      );
-    }
-
-    if (typeof value === "object") {
-      return (
-        <pre className="explanation-json">{JSON.stringify(value, null, 2)}</pre>
-      );
-    }
-
-    return <p>{String(value)}</p>;
-  };
 
   const renderList = (text) => {
     if (!text) return [];
@@ -140,6 +102,26 @@ function App() {
       .split(/\r?\n/)
       .map((item) => item.trim())
       .filter(Boolean);
+  };
+
+  const renderExplanationValue = (value) => {
+    if (Array.isArray(value)) {
+      return (
+        <ul className="detail-list">
+          {value.map((item, index) => (
+            <li key={index}>{String(item)}</li>
+          ))}
+        </ul>
+      );
+    }
+
+    if (typeof value === "object" && value !== null) {
+      return (
+        <pre className="explanation-json">{JSON.stringify(value, null, 2)}</pre>
+      );
+    }
+
+    return <p>{String(value)}</p>;
   };
 
   const handleSubmit = async (event) => {
@@ -193,6 +175,10 @@ function App() {
       setIsSubmitting(false);
     }
   };
+
+  const parsedExplanation = result
+    ? tryParseExplanation(result.explanation)
+    : null;
 
   return (
     <main className="app-shell">
@@ -294,15 +280,242 @@ function App() {
               </div>
               <div className="explanation-block">
                 <h3>AI explanation</h3>
+                {parsedExplanation?.retried || result?.explanation?.retried ? (
+                  <div className="continuation-warning">
+                    Partial response recovered via continuation retry.
+                  </div>
+                ) : null}
+
+                {/* Show uploaded image(s) and Grad-CAM when image_references present */}
+                {parsedExplanation?.image_references ||
+                (result?.explanation &&
+                  typeof result.explanation === "object" &&
+                  result.explanation.image_references) ? (
+                  <section className="explanation-section">
+                    <h4>{toTitle("image_references")}</h4>
+                    <div className="split-columns">
+                      <div>
+                        <h5>Uploaded image</h5>
+                        {needsDualUpload ? (
+                          <>
+                            {getImageSrc(
+                              parsedExplanation?.image_references?.original_mri,
+                            ) ||
+                            getImageSrc(
+                              result?.explanation?.image_references
+                                ?.original_mri,
+                            ) ||
+                            (imageFile
+                              ? URL.createObjectURL(imageFile)
+                              : undefined) ? (
+                              <figure>
+                                <img
+                                  className="gradcam-image"
+                                  src={
+                                    getImageSrc(
+                                      parsedExplanation?.image_references
+                                        ?.original_mri,
+                                    ) ||
+                                    getImageSrc(
+                                      result?.explanation?.image_references
+                                        ?.original_mri,
+                                    ) ||
+                                    (imageFile
+                                      ? URL.createObjectURL(imageFile)
+                                      : undefined)
+                                  }
+                                  alt="Uploaded MRI"
+                                />
+                                <figcaption>MRI upload</figcaption>
+                              </figure>
+                            ) : (
+                              <p>No MRI uploaded</p>
+                            )}
+
+                            {getImageSrc(
+                              parsedExplanation?.image_references?.original_ct,
+                            ) ||
+                            getImageSrc(
+                              result?.explanation?.image_references
+                                ?.original_ct,
+                            ) ||
+                            (secondaryImageFile
+                              ? URL.createObjectURL(secondaryImageFile)
+                              : undefined) ? (
+                              <figure>
+                                <img
+                                  className="gradcam-image"
+                                  src={
+                                    getImageSrc(
+                                      parsedExplanation?.image_references
+                                        ?.original_ct,
+                                    ) ||
+                                    getImageSrc(
+                                      result?.explanation?.image_references
+                                        ?.original_ct,
+                                    ) ||
+                                    (secondaryImageFile
+                                      ? URL.createObjectURL(secondaryImageFile)
+                                      : undefined)
+                                  }
+                                  alt="Uploaded CT"
+                                />
+                                <figcaption>CT upload</figcaption>
+                              </figure>
+                            ) : (
+                              <p>No CT uploaded</p>
+                            )}
+                          </>
+                        ) : getImageSrc(
+                            parsedExplanation?.image_references?.original,
+                          ) ||
+                          getImageSrc(
+                            result?.explanation?.image_references?.original,
+                          ) ||
+                          (imageFile
+                            ? URL.createObjectURL(imageFile)
+                            : undefined) ? (
+                          <figure>
+                            <img
+                              className="gradcam-image"
+                              src={
+                                getImageSrc(
+                                  parsedExplanation?.image_references?.original,
+                                ) ||
+                                getImageSrc(
+                                  result?.explanation?.image_references
+                                    ?.original,
+                                ) ||
+                                (imageFile
+                                  ? URL.createObjectURL(imageFile)
+                                  : undefined)
+                              }
+                              alt="Uploaded image"
+                            />
+                            <figcaption>Uploaded scan</figcaption>
+                          </figure>
+                        ) : (
+                          <p>No uploaded image available</p>
+                        )}
+                      </div>
+
+                      <div>
+                        <h5>Grad-CAM</h5>
+                        {needsDualUpload ? (
+                          <>
+                            {getImageSrc(
+                              parsedExplanation?.image_references?.gradcam_mri,
+                            ) ||
+                            getImageSrc(
+                              result?.explanation?.image_references
+                                ?.gradcam_mri,
+                            ) ||
+                            getImageSrc(result?.grad_cam_mri) ? (
+                              <figure>
+                                <img
+                                  className="gradcam-image"
+                                  src={
+                                    getImageSrc(
+                                      parsedExplanation?.image_references
+                                        ?.gradcam_mri,
+                                    ) ||
+                                    getImageSrc(
+                                      result?.explanation?.image_references
+                                        ?.gradcam_mri,
+                                    ) ||
+                                    getImageSrc(result?.grad_cam_mri)
+                                  }
+                                  alt="MRI Grad-CAM"
+                                />
+                                <figcaption>MRI Grad-CAM</figcaption>
+                              </figure>
+                            ) : (
+                              <p>No MRI Grad-CAM</p>
+                            )}
+
+                            {getImageSrc(
+                              parsedExplanation?.image_references?.gradcam_ct,
+                            ) ||
+                            getImageSrc(
+                              result?.explanation?.image_references?.gradcam_ct,
+                            ) ||
+                            getImageSrc(result?.grad_cam_ct) ? (
+                              <figure>
+                                <img
+                                  className="gradcam-image"
+                                  src={
+                                    getImageSrc(
+                                      parsedExplanation?.image_references
+                                        ?.gradcam_ct,
+                                    ) ||
+                                    getImageSrc(
+                                      result?.explanation?.image_references
+                                        ?.gradcam_ct,
+                                    ) ||
+                                    getImageSrc(result?.grad_cam_ct)
+                                  }
+                                  alt="CT Grad-CAM"
+                                />
+                                <figcaption>CT Grad-CAM</figcaption>
+                              </figure>
+                            ) : (
+                              <p>No CT Grad-CAM</p>
+                            )}
+                          </>
+                        ) : getImageSrc(
+                            parsedExplanation?.image_references?.gradcam,
+                          ) ||
+                          getImageSrc(
+                            result?.explanation?.image_references?.gradcam,
+                          ) ||
+                          getImageSrc(result?.grad_cam) ? (
+                          <figure>
+                            <img
+                              className="gradcam-image"
+                              src={
+                                getImageSrc(
+                                  parsedExplanation?.image_references?.gradcam,
+                                ) ||
+                                getImageSrc(
+                                  result?.explanation?.image_references
+                                    ?.gradcam,
+                                ) ||
+                                getImageSrc(result?.grad_cam)
+                              }
+                              alt="Grad-CAM"
+                            />
+                            <figcaption>Grad-CAM</figcaption>
+                          </figure>
+                        ) : (
+                          <p>No Grad-CAM available</p>
+                        )}
+                      </div>
+                    </div>
+                  </section>
+                ) : null}
+
                 {parsedExplanation ? (
-                  <div className="explanation-grid">
-                    {Object.keys(parsedExplanation).map((key) => (
+                  Object.keys(parsedExplanation)
+                    .filter((k) => k !== "retried" && k !== "image_references")
+                    .map((key) => (
                       <section className="explanation-section" key={key}>
                         <h4>{toTitle(key)}</h4>
                         {renderExplanationValue(parsedExplanation[key])}
                       </section>
-                    ))}
-                  </div>
+                    ))
+                ) : typeof result.explanation === "object" &&
+                  result.explanation !== null ? (
+                  <pre className="explanation-json">
+                    {JSON.stringify(
+                      Object.fromEntries(
+                        Object.entries(result.explanation).filter(
+                          ([k]) => k !== "retried",
+                        ),
+                      ),
+                      null,
+                      2,
+                    )}
+                  </pre>
                 ) : (
                   <p>{result.explanation}</p>
                 )}
