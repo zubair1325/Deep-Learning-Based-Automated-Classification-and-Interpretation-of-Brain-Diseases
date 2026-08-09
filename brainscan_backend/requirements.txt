@@ -8,6 +8,6 @@ Pillow==10.0.0
 numpy==1.26.4
 sympy==1.14.0
 -f https://download.pytorch.org/whl/cpu/torch_stable.html
-torch==2.13.0+cpu
-torchvision==0.28.0+cpu
+torch==2.13.0
+torchvision==0.28.0
 gunicorn==26.0.0
