@@ -19,7 +19,7 @@ load_dotenv(BASE_DIR.parent / '.env')
 
 SECRET_KEY = 'django-insecure-v)@w$nm74u@lpgn6rvz9f953-8$$mon^zsatof211b)o5vs-_o'
 DEBUG = True
-ALLOWED_HOSTS = ['127.0.0.1', 'localhost', 'testserver']
+ALLOWED_HOSTS = ['127.0.0.1', 'localhost', 'testserver', 'brain-scan-backend-hh66.onrender.com']
 
 INSTALLED_APPS = [
     'django.contrib.admin',
