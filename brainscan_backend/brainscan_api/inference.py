@@ -8,8 +8,9 @@ import numpy as np
 import torch
 import torch.nn as nn
 from PIL import Image
-from torchvision import models, transforms
 from google.genai import types
+
+MODEL_CACHE: dict[str, tuple[torch.nn.Module, str]] = {}
 
 BASE_DIR = Path(__file__).resolve().parents[2]
 MODEL_ROOT = BASE_DIR / 'Saved Model'
@@ -94,6 +95,8 @@ def _resolve_model(disease_label: str):
             model.module_name = 'densenet_shared'
             return model, 'densenet_shared'
 
+        from torchvision import models
+
         num_classes = _infer_dense_output_from_state_dict(state_dict)
         hidden_dim = _infer_dense_hidden_from_state_dict(state_dict)
         model = models.densenet121(weights=None)
@@ -126,6 +129,8 @@ def _infer_dense_hidden_from_state_dict(state_dict):
 
 
 def _build_preprocessor():
+    from torchvision import transforms
+
     return transforms.Compose([
         transforms.Resize((224, 224)),
         transforms.ToTensor(),
@@ -823,7 +828,7 @@ def _generate_gemini_explanation(
 
 
 def predict_image(disease_label: str, uploaded_files):
-    model, architecture = _resolve_model(disease_label)
+    model, architecture = _get_model(disease_label)
     file_list = uploaded_files if isinstance(uploaded_files, list) else [uploaded_files]
 
     if disease_label == 'Brain Tumor MRI and CT Scan':
@@ -1088,6 +1093,8 @@ class ConvNeXtTinyLegacy(nn.Module):
 class SharedDenseNetDualHead(nn.Module):
     def __init__(self, num_mri_classes=4, num_ct_classes=2):
         super().__init__()
+        from torchvision import models
+
         base_model = models.densenet121(weights=None)
         self.backbone = nn.Module()
         self.backbone.features = base_model.features
