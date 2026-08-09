@@ -1,0 +1,11 @@
+Django
+djangorestframework
+django-cors-headers
+python-dotenv
+google-genai
+opencv-python
+Pillow
+numpy
+torch
+torchvision
+gunicorn
