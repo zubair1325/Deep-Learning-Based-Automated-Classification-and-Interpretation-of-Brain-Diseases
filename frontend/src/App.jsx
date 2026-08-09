@@ -190,10 +190,13 @@ function App() {
     }
 
     try {
-      const response = await fetch("/api/predict/", {
-        method: "POST",
-        body: formData,
-      });
+      const response = await fetch(
+        "https://brain-scan-backend-hh66.onrender.com/api/predict/",
+        {
+          method: "POST",
+          body: formData,
+        },
+      );
 
       const data = await response.json();
 
